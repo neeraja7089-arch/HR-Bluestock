@@ -1,0 +1,65 @@
+import pandas as pd
+import os
+
+folder = "data/raw"
+
+# Load all CSV files
+for file in os.listdir(folder):
+
+    if file.endswith(".csv"):
+
+        path = os.path.join(folder, file)
+
+        df = pd.read_csv(path)
+
+        print("\n" + "="*50)
+        print("FILE:", file)
+
+        print("\nSHAPE")
+        print(df.shape)
+
+        print("\nDTYPES")
+        print(df.dtypes)
+
+        print("\nHEAD")
+        print(df.head())
+
+
+# Explore fund_master.csv
+try:
+    fund_master = pd.read_csv("data/raw/fund_master.csv")
+
+    print("\nFUND HOUSES")
+    print(fund_master["fund_house"].unique())
+
+    print("\nCATEGORIES")
+    print(fund_master["category"].unique())
+
+    print("\nSUB-CATEGORIES")
+    print(fund_master["subcategory"].unique())
+
+    print("\nRISK GRADES")
+    print(fund_master["risk_grade"].unique())
+
+except:
+    print("fund_master.csv not found")
+
+
+# Validate AMFI Codes
+try:
+    fund_master = pd.read_csv("data/raw/fund_master.csv")
+    nav_history = pd.read_csv("data/raw/nav_history.csv")
+
+    master_codes = set(fund_master["scheme_code"])
+    nav_codes = set(nav_history["scheme_code"])
+
+    missing = master_codes - nav_codes
+
+    print("\nAMFI VALIDATION")
+    print("Missing Codes:", len(missing))
+
+    if len(missing) > 0:
+        print(missing)
+
+except:
+    print("nav_history.csv not found")
