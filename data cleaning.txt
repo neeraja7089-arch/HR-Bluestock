@@ -1,0 +1,114 @@
+import pandas as pd
+import numpy as np
+
+# =====================================
+# NAV HISTORY CLEANING
+# =====================================
+
+nav = pd.read_csv("data/raw/nav_history.csv")
+
+nav["date"] = pd.to_datetime(nav["date"], errors="coerce")
+
+nav = nav.sort_values(
+    ["amfi_code", "date"]
+)
+
+nav["nav"] = (
+    nav.groupby("amfi_code")["nav"]
+    .ffill()
+)
+
+nav = nav.drop_duplicates()
+
+nav = nav[nav["nav"] > 0]
+
+nav.to_csv(
+    "data/processed/nav_history_clean.csv",
+    index=False
+)
+
+print("NAV cleaned")
+
+
+# =====================================
+# INVESTOR TRANSACTIONS CLEANING
+# =====================================
+
+txn = pd.read_csv(
+    "data/raw/investor_transactions.csv"
+)
+
+txn["transaction_date"] = pd.to_datetime(
+    txn["transaction_date"],
+    errors="coerce"
+)
+
+mapping = {
+    "sip": "SIP",
+    "SIP": "SIP",
+    "lumpsum": "Lumpsum",
+    "LUMP SUM": "Lumpsum",
+    "redemption": "Redemption",
+    "REDEEM": "Redemption"
+}
+
+txn["transaction_type"] = (
+    txn["transaction_type"]
+    .replace(mapping)
+)
+
+txn = txn[txn["amount"] > 0]
+
+valid_kyc = ["Verified", "Pending", "Rejected"]
+
+txn["kyc_valid"] = txn["kyc_status"].isin(valid_kyc)
+
+txn.to_csv(
+    "data/processed/investor_transactions_clean.csv",
+    index=False
+)
+
+print("Transactions cleaned")
+
+
+# =====================================
+# SCHEME PERFORMANCE CLEANING
+# =====================================
+
+perf = pd.read_csv(
+    "data/raw/scheme_performance.csv"
+)
+
+return_cols = [
+    "return_1yr",
+    "return_3yr",
+    "return_5yr"
+]
+
+for col in return_cols:
+    perf[col] = pd.to_numeric(
+        perf[col],
+        errors="coerce"
+    )
+
+perf["expense_ratio"] = pd.to_numeric(
+    perf["expense_ratio"],
+    errors="coerce"
+)
+
+perf["expense_ratio_flag"] = (
+    (perf["expense_ratio"] < 0.1)
+    | (perf["expense_ratio"] > 2.5)
+)
+
+for col in return_cols:
+    perf[f"{col}_anomaly"] = (
+        perf[col].abs() > 100
+    )
+
+perf.to_csv(
+    "data/processed/scheme_performance_clean.csv",
+    index=False
+)
+
+print("Performance cleaned")
