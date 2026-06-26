@@ -1,0 +1,27 @@
+nav['Date'] = pd.to_datetime(nav['Date'])
+
+fig = px.line(
+    nav,
+    x="Date",
+    y="NAV",
+    color="Scheme",
+    title="Daily NAV Trend (2022-2026)"
+)
+
+fig.add_vrect(
+    x0="2023-01-01",
+    x1="2023-12-31",
+    fillcolor="green",
+    opacity=0.15,
+    annotation_text="2023 Bull Run"
+)
+
+fig.add_vrect(
+    x0="2024-01-01",
+    x1="2024-12-31",
+    fillcolor="red",
+    opacity=0.12,
+    annotation_text="2024 Market Correction"
+)
+
+fig.show()
