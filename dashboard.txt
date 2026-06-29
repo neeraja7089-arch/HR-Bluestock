@@ -1,0 +1,47 @@
+import pandas as pd
+import sqlite3
+import os
+from glob import glob
+
+# Folder containing cleaned CSV files
+DATA_FOLDER = "cleaned_csvs"
+
+# SQLite database
+DB_NAME = "mutual_fund.db"
+
+# Connect to SQLite
+conn = sqlite3.connect(DB_NAME)
+
+# Import every CSV into SQLite
+csv_files = glob(os.path.join(DATA_FOLDER, "*.csv"))
+
+print("Loading Tables...\n")
+
+for file in csv_files:
+    table = os.path.splitext(os.path.basename(file))[0]
+
+    df = pd.read_csv(file)
+
+    # Convert date columns if present
+    for col in df.columns:
+        if "date" in col.lower():
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    df.to_sql(table, conn, if_exists="replace", index=False)
+
+    print(f"{table}  --> {len(df)} rows")
+
+print("\nTotal Tables Loaded:", len(csv_files))
+
+# Verify all tables
+tables = pd.read_sql(
+    "SELECT name FROM sqlite_master WHERE type='table';",
+    conn
+)
+
+print("\nTables in Database:")
+print(tables)
+
+conn.close()
+
+print("\nSQLite database created successfully.")
