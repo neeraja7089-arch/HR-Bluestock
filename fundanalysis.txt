@@ -1,56 +1,43 @@
-# ===============================
-# PERFORMANCE ANALYTICS
-# ===============================
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import linregress
 
-# -------------------------------
-# Load Data
-# -------------------------------
-nav = pd.read_csv("nav_data.csv")           # Date, Scheme, NAV
-expense = pd.read_csv("expense_ratio.csv")  # Scheme, Expense_Ratio
-nifty50 = pd.read_csv("nifty50.csv")        # Date, Nifty50
-nifty100 = pd.read_csv("nifty100.csv")      # Date, Nifty100
+# ------------------ Load Data ------------------
+nav = pd.read_csv("nav_data.csv")
+expense = pd.read_csv("expense_ratio.csv")
+n50 = pd.read_csv("nifty50.csv")
+n100 = pd.read_csv("nifty100.csv")
 
-# Convert dates
 nav["Date"] = pd.to_datetime(nav["Date"])
-nifty50["Date"] = pd.to_datetime(nifty50["Date"])
-nifty100["Date"] = pd.to_datetime(nifty100["Date"])
+n50["Date"] = pd.to_datetime(n50["Date"])
+n100["Date"] = pd.to_datetime(n100["Date"])
 
-# Sort data
-nav = nav.sort_values(["Scheme", "Date"])
+nav = nav.sort_values(["Scheme","Date"])
 
-# -------------------------------
-# Daily Returns
-# -------------------------------
-nav["daily_return"] = nav.groupby("Scheme")["NAV"].pct_change()
+# ------------------ Daily Return ------------------
+nav["Daily_Return"] = nav.groupby("Scheme")["NAV"].pct_change()
 
-print("\nDaily Return Distribution")
-print(nav["daily_return"].describe())
+print("Daily Return Distribution")
+print(nav["Daily_Return"].describe())
 
 # Benchmark Returns
-nifty50["Benchmark_Return"] = nifty50["Nifty50"].pct_change()
-nifty100["Benchmark_Return"] = nifty100["Nifty100"].pct_change()
+n50["Return"] = n50["Nifty50"].pct_change()
+n100["Return"] = n100["Nifty100"].pct_change()
 
-# Risk Free Rate
 RF = 0.065
 
-results = []
+result = []
 
-# -------------------------------
-# Calculate Metrics
-# -------------------------------
+# ------------------ Calculate Metrics ------------------
 for scheme in nav["Scheme"].unique():
 
     fund = nav[nav["Scheme"] == scheme].copy()
-    returns = fund["daily_return"].dropna()
+    r = fund["Daily_Return"].dropna()
 
     # CAGR
     def CAGR(data, years):
-        if len(data) < years * 252:
+        if len(data) < years*252:
             return np.nan
         start = data.iloc[-years*252]["NAV"]
         end = data.iloc[-1]["NAV"]
@@ -60,46 +47,44 @@ for scheme in nav["Scheme"].unique():
     cagr3 = CAGR(fund,3)
     cagr5 = CAGR(fund,5)
 
-    # Sharpe Ratio
-    sharpe = ((returns.mean()*252)-RF)/(returns.std()*np.sqrt(252))
+    # Sharpe
+    sharpe = ((r.mean()*252)-RF)/(r.std()*np.sqrt(252))
 
-    # Sortino Ratio
-    downside = returns[returns<0]
-    sortino = ((returns.mean()*252)-RF)/(downside.std()*np.sqrt(252))
+    # Sortino
+    downside = r[r<0]
+    sortino = ((r.mean()*252)-RF)/(downside.std()*np.sqrt(252))
 
     # Alpha & Beta
     temp = pd.merge(
-        fund[["Date","daily_return"]],
-        nifty100[["Date","Benchmark_Return"]],
+        fund[["Date","Daily_Return"]],
+        n100[["Date","Return"]],
         on="Date"
     ).dropna()
 
-    slope, intercept, r, p, se = linregress(
-        temp["Benchmark_Return"],
-        temp["daily_return"]
+    beta, intercept, _, _, _ = linregress(
+        temp["Return"],
+        temp["Daily_Return"]
     )
 
     alpha = intercept*252
-    beta = slope
 
     # Maximum Drawdown
     fund["RunningMax"] = fund["NAV"].cummax()
     fund["Drawdown"] = fund["NAV"]/fund["RunningMax"]-1
 
-    max_dd = fund["Drawdown"].min()
-
+    maxdd = fund["Drawdown"].min()
     worst = fund.loc[fund["Drawdown"].idxmin(),"Date"]
 
     # Tracking Error
     temp2 = pd.merge(
-        fund[["Date","daily_return"]],
-        nifty50[["Date","Benchmark_Return"]],
+        fund[["Date","Daily_Return"]],
+        n50[["Date","Return"]],
         on="Date"
     ).dropna()
 
-    tracking_error = np.std(
-        temp2["daily_return"]-
-        temp2["Benchmark_Return"]
+    tracking = np.std(
+        temp2["Daily_Return"]-
+        temp2["Return"]
     )*np.sqrt(252)
 
     exp = expense.loc[
@@ -107,129 +92,86 @@ for scheme in nav["Scheme"].unique():
         "Expense_Ratio"
     ].values[0]
 
-    results.append([
-        scheme,
-        cagr1,
-        cagr3,
-        cagr5,
-        sharpe,
-        sortino,
-        alpha,
-        beta,
-        max_dd,
-        worst,
-        tracking_error,
-        exp
+    result.append([
+        scheme,cagr1,cagr3,cagr5,
+        sharpe,sortino,
+        alpha,beta,
+        maxdd,worst,
+        tracking,exp
     ])
 
-# -------------------------------
-# Results Table
-# -------------------------------
-score = pd.DataFrame(results,columns=[
-    "Scheme",
-    "CAGR_1Y",
-    "CAGR_3Y",
-    "CAGR_5Y",
-    "Sharpe",
-    "Sortino",
-    "Alpha",
-    "Beta",
-    "Max_Drawdown",
-    "Worst_Date",
-    "Tracking_Error",
-    "Expense_Ratio"
+# ------------------ Score Table ------------------
+score = pd.DataFrame(result,columns=[
+    "Scheme","CAGR1Y","CAGR3Y","CAGR5Y",
+    "Sharpe","Sortino",
+    "Alpha","Beta",
+    "MaxDrawdown","WorstDate",
+    "TrackingError",
+    "ExpenseRatio"
 ])
 
-# -------------------------------
 # Ranking
-# -------------------------------
-score["ReturnRank"] = score["CAGR_3Y"].rank(ascending=False)
+score["ReturnRank"] = score["CAGR3Y"].rank(ascending=False)
 score["SharpeRank"] = score["Sharpe"].rank(ascending=False)
 score["AlphaRank"] = score["Alpha"].rank(ascending=False)
-score["ExpenseRank"] = score["Expense_Ratio"].rank(ascending=True)
-score["DrawdownRank"] = score["Max_Drawdown"].rank(ascending=False)
+score["ExpenseRank"] = score["ExpenseRatio"].rank(ascending=True)
+score["DrawdownRank"] = score["MaxDrawdown"].rank(ascending=False)
 
-# -------------------------------
-# Fund Score (0-100)
-# -------------------------------
-score["FundScore"] = (
-
+# Fund Score
+score["FundScore"] = 100 - (
 30*score["ReturnRank"] +
 25*score["SharpeRank"] +
 20*score["AlphaRank"] +
 15*score["ExpenseRank"] +
 10*score["DrawdownRank"]
-
 )/100
 
-score["FundScore"] = 100-score["FundScore"]
+score = score.sort_values("FundScore",ascending=False)
 
-score = score.sort_values(
-    "FundScore",
-    ascending=False
-)
-
-# -------------------------------
 # Save Files
-# -------------------------------
 score.to_csv("fund_scorecard.csv",index=False)
 
-score[[
-    "Scheme",
-    "Alpha",
-    "Beta"
-]].to_csv("alpha_beta.csv",index=False)
+score[["Scheme","Alpha","Beta"]].to_csv(
+    "alpha_beta.csv",
+    index=False
+)
 
-print("\nTop 10 Funds")
-print(score.head(10))
+print(score.head())
 
-# -------------------------------
-# Benchmark Comparison Chart
-# -------------------------------
+# ------------------ Benchmark Comparison ------------------
 plt.figure(figsize=(12,6))
 
 top5 = score.head(5)["Scheme"]
 
 for s in top5:
-
-    d = nav[
-        nav["Scheme"]==s
-    ].tail(756)
-
-    plt.plot(
-        d["Date"],
-        d["NAV"],
-        label=s
-    )
+    d = nav[nav["Scheme"]==s].tail(756)
+    plt.plot(d["Date"],d["NAV"],label=s)
 
 plt.plot(
-    nifty50.tail(756)["Date"],
-    nifty50.tail(756)["Nifty50"],
+    n50.tail(756)["Date"],
+    n50.tail(756)["Nifty50"],
     label="Nifty50",
     linewidth=3
 )
 
 plt.plot(
-    nifty100.tail(756)["Date"],
-    nifty100.tail(756)["Nifty100"],
+    n100.tail(756)["Date"],
+    n100.tail(756)["Nifty100"],
     label="Nifty100",
     linewidth=3
 )
 
-plt.title("Top 5 Funds vs Nifty 50 & Nifty 100")
+plt.title("Top 5 Funds vs Benchmarks")
 plt.xlabel("Date")
 plt.ylabel("NAV / Index")
 plt.legend()
 plt.grid(True)
 
-plt.savefig(
-    "benchmark_comparison.png",
-    dpi=300
-)
+plt.savefig("benchmark_comparison.png",dpi=300)
 
 plt.show()
 
-print("\nFiles Generated Successfully")
+print("\nFiles Created Successfully")
 print("1. fund_scorecard.csv")
 print("2. alpha_beta.csv")
 print("3. benchmark_comparison.png")
