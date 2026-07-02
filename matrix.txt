@@ -1,0 +1,164 @@
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+returns = pd.read_csv("daily_returns.csv")
+transactions = pd.read_csv("transactions.csv")
+funds = pd.read_csv("fund_master.csv")
+portfolio = pd.read_csv("portfolio.csv")
+
+returns["date"] = pd.to_datetime(returns["date"])
+transactions["transaction_date"] = pd.to_datetime(transactions["transaction_date"]
+
+var_list = []
+
+for scheme in returns["scheme_name"].unique():
+
+    df = returns[returns["scheme_name"] == scheme]
+
+    var95 = np.percentile(df["daily_return"], 5)
+
+    cvar = df[df["daily_return"] <= var95]["daily_return"].mean()
+
+    var_list.append([scheme, var95, cvar])
+
+var_df = pd.DataFrame(var_list,
+                      columns=["Scheme", "VaR_95", "CVaR"])
+
+var_df.to_csv("var_cvar_report.csv", index=False)
+
+print("\nVaR & CVaR")
+print(var_df.head())
+plt.figure(figsize=(12,6))
+top5 = returns["scheme_name"].unique()[:5]
+for fund in top5:
+    df = returns[returns["scheme_name"] == fund].sort_values("date")
+    sharpe = (df["daily_return"].rolling(90).mean() /
+              df["daily_return"].rolling(90).std()) * np.sqrt(252)
+    plt.plot(df["date"], sharpe, label=fund)
+
+plt.title("Rolling 90-Day Sharpe Ratio")
+plt.xlabel("Date")
+plt.ylabel("Sharpe Ratio")
+plt.legend()
+plt.savefig("rolling_sharpe_chart.png")
+plt.show()
+
+transactions["first_year"] = transactions.groupby(
+    "investor_id"
+)["transaction_date"].transform("min").dt.year
+
+cohort = transactions.groupby("first_year").agg(
+
+    Avg_SIP=("amount", "mean"),
+    Total_Invested=("amount", "sum")
+
+).reset_index()
+
+top_fund = (transactions.groupby(["first_year", "scheme_name"])
+            .size()
+            .reset_index(name="count"))
+
+top_fund = top_fund.loc[
+    top_fund.groupby("first_year")["count"].idxmax()
+]
+
+cohort = cohort.merge(
+    top_fund[["first_year", "scheme_name"]],
+    on="first_year"
+)
+
+print("\nInvestor Cohort Analysis")
+print(cohort)
+
+sip = transactions[
+    transactions["transaction_type"] == "SIP"
+]
+
+gap_data = []
+
+for investor in sip["investor_id"].unique():
+
+    df = sip[sip["investor_id"] == investor].sort_values("transaction_date")
+
+    if len(df) >= 6:
+
+        gap = df["transaction_date"].diff().dt.days.mean()
+
+        status = "At-Risk" if gap > 35 else "Healthy"
+
+        gap_data.append([investor, gap, status])
+
+gap_df = pd.DataFrame(
+    gap_data,
+    columns=["Investor", "Average_Gap", "Status"]
+)
+
+print("\nSIP Continuity")
+print(gap_df.head())
+
+sharpe = returns.groupby("scheme_name")["daily_return"].agg(
+    lambda x: (x.mean()/x.std())*np.sqrt(252)
+).reset_index()
+
+sharpe.columns = ["scheme_name", "Sharpe"]
+
+funds = funds.merge(sharpe, on="scheme_name"
+
+risk = input("\nEnter Risk Appetite (Low/Moderate/High): ")
+
+recommend = funds[funds["risk_grade"] == risk]
+
+recommend = recommend.sort_values(
+    "Sharpe",
+    ascending=False
+).head(3)
+
+print("\nTop 3 Recommended Funds")
+print(recommend[["scheme_name", "risk_grade", "Sharpe"]])
+
+
+
+portfolio["Square"] = portfolio["weight"] ** 2
+
+hhi = portfolio.groupby("scheme_name")["Square"].sum().reset_index()
+
+hhi.columns = ["scheme_name", "HHI"]
+
+equity = funds[funds["fund_type"] == "Equity"]
+
+equity_hhi = equity.merge(hhi, on="scheme_name")
+
+print("\nSector HHI")
+print(equity_hhi.sort_values("HHI", ascending=False))
+
+
+
+print("\n==============================")
+print("ADVANCED INSIGHTS")
+print("==============================")
+
+highest_var = var_df.sort_values("VaR_95").iloc[0]
+print(f"1. Highest downside risk fund: {highest_var['Scheme']}")
+
+highest_cvar = var_df.sort_values("CVaR").iloc[0]
+print(f"2. Highest tail risk fund: {highest_cvar['Scheme']}")
+
+best_cohort = cohort.sort_values("Total_Invested",
+                                 ascending=False).iloc[0]
+print(f"3. Highest investing cohort: {best_cohort['first_year']}")
+
+continuity = round(
+    (gap_df["Status"] == "Healthy").mean() * 100,
+    2
+)
+print(f"4. SIP Continuity Rate: {continuity}%")
+
+top_hhi = equity_hhi.sort_values("HHI",
+                                 ascending=False).iloc[0]
+print(f"5. Most concentrated equity fund: {top_hhi['scheme_name']}")
+
+print("\nFiles Created Successfully")
+print("- var_cvar_report.csv")
+print("- rolling_sharpe_chart.png")
