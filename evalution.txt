@@ -1,0 +1,25 @@
+from pathlib import Path
+import pandas as pd
+
+raw = Path("data/raw")
+processed = Path("data/processed")
+
+processed.mkdir(parents=True, exist_ok=True)
+
+try:
+    funds = pd.read_csv(raw/"fund_master.csv")
+    nav = pd.read_csv(raw/"daily_nav.csv")
+    trans = pd.read_csv(raw/"transactions.csv")
+
+    funds.drop_duplicates(inplace=True)
+    nav.fillna(method="ffill", inplace=True)
+    trans.dropna(inplace=True)
+
+    funds.to_csv(processed/"fund_master.csv", index=False)
+    nav.to_csv(processed/"daily_nav.csv", index=False)
+    trans.to_csv(processed/"transactions.csv", index=False)
+
+    print("ETL Completed")
+
+except Exception as e:
+    print(e)
